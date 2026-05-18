@@ -1,0 +1,115 @@
+{
+  "instruments": [
+    {
+      "id": "guitar",
+      "displayName": "Guitar",
+      "category": "string",
+      "isUnlocked": true,
+      "motionProfile": {
+        "shakeThreshold": 1.5,
+        "swipeThreshold": 0.8,
+        "tiltSensitivity": 0.6,
+        "cooldownMs": 150,
+        "consecutiveSamplesRequired": 3
+      },
+      "audioProfile": {
+        "debounceMs": 80,
+        "velocityLayers": ["soft", "medium", "hard"],
+        "reverbEnabled": true,
+        "reverbWetMix": 0.15,
+        "samplePrefix": "guitar"
+      },
+      "notes": ["E2","A2","D3","G3","B3","E4"],
+      "chords": [
+        {"id": "Am", "displayName": "Am", "notes": ["A2","E3","A3","C4","E4"]},
+        {"id": "G",  "displayName": "G",  "notes": ["G2","B2","D3","G3","B3","G4"]},
+        {"id": "C",  "displayName": "C",  "notes": ["C3","E3","G3","C4","E4"]},
+        {"id": "D",  "displayName": "D",  "notes": ["D3","A3","D4","Fs4"]},
+        {"id": "Em", "displayName": "Em", "notes": ["E2","B2","E3","G3","B3","E4"]},
+        {"id": "F",  "displayName": "F",  "notes": ["F2","C3","F3","A3","C4","F4"]}
+      ],
+      "hapticPattern": "strum",
+      "tutorialSteps": [
+        {"step": 1, "instruction": "Select a chord below", "highlight": "chordButtons"},
+        {"step": 2, "instruction": "Shake to strum", "highlight": "instrumentImage"},
+        {"step": 3, "instruction": "Tilt for variation", "highlight": "tiltIndicator"}
+      ]
+    },
+    {
+      "id": "ciftelija",
+      "displayName": "Çiftelija",
+      "category": "string",
+      "isUnlocked": true,
+      "motionProfile": {
+        "shakeThreshold": 1.2,
+        "swipeThreshold": 0.7,
+        "tiltSensitivity": 0.5,
+        "cooldownMs": 120,
+        "consecutiveSamplesRequired": 2
+      },
+      "audioProfile": {
+        "debounceMs": 60,
+        "velocityLayers": ["soft", "medium", "hard"],
+        "reverbEnabled": true,
+        "reverbWetMix": 0.2,
+        "samplePrefix": "ciftelija"
+      },
+      "notes": ["D4","E4","F4","G4","A4","Bb4","C5","D5"],
+      "scalePresets": [
+        {
+          "id": "phrygian",
+          "displayName": "Traditional Scale",
+          "notes": ["D4","Eb4","F4","G4","Ab4","Bb4","C5","D5"]
+        },
+        {
+          "id": "major",
+          "displayName": "Major Scale",
+          "notes": ["D4","E4","Fs4","G4","A4","B4","Cs5","D5"]
+        },
+        {
+          "id": "minor",
+          "displayName": "Minor Scale",
+          "notes": ["D4","E4","F4","G4","A4","Bb4","C5","D5"]
+        },
+        {
+          "id": "chromatic",
+          "displayName": "Chromatic",
+          "notes": ["D4","Eb4","E4","F4","Fs4","G4","Ab4","A4","Bb4","B4","C5","Cs5","D5"]
+        }
+      ],
+      "hapticPattern": "pluck",
+      "tutorialSteps": [
+        {"step": 1, "instruction": "Select a scale preset", "highlight": "scaleButtons"},
+        {"step": 2, "instruction": "Shake for rhythmic pluck", "highlight": "instrumentImage"},
+        {"step": 3, "instruction": "Swipe across screen to pluck a string", "highlight": "playArea"}
+      ]
+    },
+    {
+      "id": "lahuta",
+      "displayName": "Lahuta",
+      "category": "bowed",
+      "isUnlocked": true,
+      "motionProfile": {
+        "shakeThreshold": 1.0,
+        "swipeThreshold": 0.5,
+        "tiltSensitivity": 0.8,
+        "cooldownMs": 200,
+        "consecutiveSamplesRequired": 2
+      },
+      "audioProfile": {
+        "debounceMs": 100,
+        "velocityLayers": ["soft", "medium", "hard"],
+        "reverbEnabled": true,
+        "reverbWetMix": 0.35,
+        "samplePrefix": "lahuta"
+      },
+      "notes": ["G3","A3","B3","C4","D4","E4","Fs4","G4"],
+      "hapticPattern": "bow",
+      "tutorialSteps": [
+        {"step": 1, "instruction": "Hold the phone like a bow", "highlight": "instrumentImage"},
+        {"step": 2, "instruction": "Shake gently to draw the bow", "highlight": "instrumentImage"},
+        {"step": 3, "instruction": "Tilt to change pitch", "highlight": "tiltIndicator"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+# Claude Code agent worktrees (temporary, not source)
+.claude/worktrees/
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+.build/
+
+# Swift Package Manager
+.swiftpm/
+*.resolved
+
+# Environment
+.env
+*.env.local
