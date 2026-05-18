@@ -318,15 +318,20 @@ const DEF = {
   },
   ciftelija: {
     id: 'ciftelija', name: 'Çiftelija', strings: 2,
-    decay: 0.9930, detune: 9, strumGap: 7, stringGap: 20,
+    // Real tuning: B3 drone (lower string) + E4 melody string (upper), perfect 4th apart
+    decay: 0.9948,       // slightly higher for metal-string brightness & sustain
+    droneFreq: 246.94,   // B3 — always rings on every strum (lower thick string)
+    stringGap: 20,       // ms: melody fires first, drone 20ms later (low→high strum)
+    strumGap: 7,
     scales: {
+      // Northern Albanian diatonic on E4 melody string — Phrygian/Dorian character
       'Traditional': {
-        freqs: [293.66, 311.13, 349.23, 392.00, 415.30, 466.16, 523.25, 587.33],
-        names: ['D',    'Eb',   'F',    'G',    'Ab',   'Bb',   'C',    'D'],
+        freqs: [329.63, 349.23, 392.00, 415.30, 466.16, 493.88, 523.25, 587.33],
+        names: ['E',    'F',    'G',    'Ab',   'Bb',   'B',    'C',    'E'],
       },
-      'Major': {
-        freqs: [293.66, 329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33],
-        names: ['D',    'E',    'F#',   'G',    'A',    'B',    'C#',   'D'],
+      'Dorian': {
+        freqs: [329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33, 659.25],
+        names: ['E',    'F#',   'G',    'A',    'B',    'C#',   'D',    'E'],
       },
     },
     defaultScale: 'Traditional',
@@ -658,8 +663,10 @@ function doShake(intensity) {
     audio.strum(inst.chords[chord], vel, inst.decay, inst.detune, inst.strumGap);
     animStrings(guitarStringIds(inst.strings), intensity * 16);
   } else {
+    // Çiftelija: melody string first, then B3 drone string 20ms later
     const sc = inst.scales[scale];
-    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, inst.detune, inst.stringGap || 7);
+    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, 0);
+    setTimeout(() => audio.pluck(inst.droneFreq, vel * 0.72, inst.decay, 0), inst.stringGap);
     animStrings(ciftStringIds, intensity * 14);
   }
   pulseUI(intensity);
@@ -752,7 +759,8 @@ function bindNoteButtons(inst) {
       document.querySelectorAll('.note-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       const sc = inst.scales[S.scale];
-      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, inst.detune, inst.stringGap || 7);
+      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, 0);
+      setTimeout(() => audio.pluck(inst.droneFreq, 0.65 * 0.72, inst.decay, 0), inst.stringGap);
       animStrings(ciftStringIds, 10);
     });
   });
