@@ -7,6 +7,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Teli">
   <meta name="theme-color" content="#0D0D0D">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Teli — Play with Motion</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -315,15 +318,20 @@ const DEF = {
   },
   ciftelija: {
     id: 'ciftelija', name: 'Çiftelija', strings: 2,
-    decay: 0.9930, detune: 9, strumGap: 7,
+    // Real tuning: B3 drone (lower string) + E4 melody string (upper), perfect 4th apart
+    decay: 0.9948,       // slightly higher for metal-string brightness & sustain
+    droneFreq: 246.94,   // B3 — always rings on every strum (lower thick string)
+    stringGap: 20,       // ms: melody fires first, drone 20ms later (low→high strum)
+    strumGap: 7,
     scales: {
+      // Northern Albanian diatonic on E4 melody string — Phrygian/Dorian character
       'Traditional': {
-        freqs: [293.66, 311.13, 349.23, 392.00, 415.30, 466.16, 523.25, 587.33],
-        names: ['D',    'Eb',   'F',    'G',    'Ab',   'Bb',   'C',    'D'],
+        freqs: [329.63, 349.23, 392.00, 415.30, 466.16, 493.88, 523.25, 587.33],
+        names: ['E',    'F',    'G',    'Ab',   'Bb',   'B',    'C',    'E'],
       },
-      'Major': {
-        freqs: [293.66, 329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33],
-        names: ['D',    'E',    'F#',   'G',    'A',    'B',    'C#',   'D'],
+      'Dorian': {
+        freqs: [329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33, 659.25],
+        names: ['E',    'F#',   'G',    'A',    'B',    'C#',   'D',    'E'],
       },
     },
     defaultScale: 'Traditional',
@@ -414,13 +422,12 @@ class TeliAudio {
     src.start();
   }
 
-  pluck(freq, vel, decay, detuneCents = 0) {
+  pluck(freq, vel, decay, detuneCents = 0, stringGap = 7) {
     const buf = this._ks(freq, vel, decay);
     this._play(buf, 0);
     if (detuneCents) {
-      // Second course string, slightly detuned — gives Çiftelija shimmer
       const buf2 = this._ks(freq, vel * 0.78, decay - 0.001);
-      setTimeout(() => this._play(buf2, detuneCents), 7);
+      setTimeout(() => this._play(buf2, detuneCents), stringGap);
     }
   }
 
@@ -435,12 +442,11 @@ class TeliAudio {
 class TeliMotion {
   constructor(cb) {
     this.cb = cb;
-    this.s = {x:0,y:0,z:0};  // smoothed accel
-    this.a = 0.32;            // EMA alpha
-    this.threshold = 11;      // m/s² trigger threshold
-    this._swinging = false;   // true while inside an active swing
-    this._peakMag  = 0;       // highest magnitude seen in current swing
-    this._lastFire = 0;       // timestamp of last trigger (guards zero-crossing jitter)
+    this.s = {x:0,y:0,z:0};
+    this.a = 0.32;
+    this._swinging = false;
+    this._peakMag  = 0;
+    this._lastFire = 0;
     this._touch = null;
     this._handler = this._onMotion.bind(this);
   }
@@ -470,13 +476,15 @@ class TeliMotion {
     const raw = useClean ? e.acceleration : e.accelerationIncludingGravity;
     if (!raw || raw.x == null) return;
 
-    const threshold = useClean ? this.threshold : this.threshold + 8;
+    // Single-axis threshold — X is left/right when phone held in portrait
+    const threshold = useClean ? 8 : 14;
 
     this.s.x = this.a * raw.x + (1 - this.a) * this.s.x;
     this.s.y = this.a * raw.y + (1 - this.a) * this.s.y;
     this.s.z = this.a * raw.z + (1 - this.a) * this.s.z;
 
-    const mag = Math.sqrt(this.s.x**2 + this.s.y**2 + this.s.z**2);
+    // Use X axis only — detects left/right shake, ignores forward/backward
+    const mag = Math.abs(this.s.x);
 
     // Tilt: normalise x-axis to 0-1
     const tilt = Math.max(0, Math.min(1, (raw.x + 5) / 10));
@@ -485,16 +493,12 @@ class TeliMotion {
     const now = Date.now();
 
     if (!this._swinging) {
-      // Wait for the swing to cross the threshold
       if (mag > threshold && now - this._lastFire > 60) {
         this._swinging = true;
         this._peakMag  = mag;
       }
     } else {
-      // Inside a swing — keep tracking the peak
       if (mag > this._peakMag) this._peakMag = mag;
-
-      // Swing is over when magnitude falls back below 60% of threshold
       if (mag < threshold * 0.6) {
         const intensity = Math.min(1, (this._peakMag - threshold) / 20);
         this.cb.shake(intensity);
@@ -659,8 +663,10 @@ function doShake(intensity) {
     audio.strum(inst.chords[chord], vel, inst.decay, inst.detune, inst.strumGap);
     animStrings(guitarStringIds(inst.strings), intensity * 16);
   } else {
+    // Çiftelija: melody string first, then B3 drone string 20ms later
     const sc = inst.scales[scale];
-    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, inst.detune);
+    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, 0);
+    setTimeout(() => audio.pluck(inst.droneFreq, vel * 0.72, inst.decay, 0), inst.stringGap);
     animStrings(ciftStringIds, intensity * 14);
   }
   pulseUI(intensity);
@@ -753,7 +759,8 @@ function bindNoteButtons(inst) {
       document.querySelectorAll('.note-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       const sc = inst.scales[S.scale];
-      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, inst.detune);
+      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, 0);
+      setTimeout(() => audio.pluck(inst.droneFreq, 0.65 * 0.72, inst.decay, 0), inst.stringGap);
       animStrings(ciftStringIds, 10);
     });
   });
