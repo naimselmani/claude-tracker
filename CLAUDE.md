@@ -142,6 +142,7 @@ If real samples are added later (Phase 3+):
 
 ## Development rules
 
+- **Never merge or push to `main` without explicit user instruction.** All work stays on feature branches until the user says "merge to main" or equivalent.
 - All new instrument/feature work goes on a feature branch — never commit directly to `main`
 - The `web/index.html` must remain a **single self-contained file** (no external CDN links, no separate JS/CSS files)
 - Do not add tracking, analytics, or user accounts to the web app
