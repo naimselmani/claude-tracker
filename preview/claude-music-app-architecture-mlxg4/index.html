@@ -318,7 +318,7 @@ const DEF = {
   },
   ciftelija: {
     id: 'ciftelija', name: 'Çiftelija', strings: 2,
-    decay: 0.9930, detune: 9, strumGap: 7,
+    decay: 0.9930, detune: 9, strumGap: 7, stringGap: 90,
     scales: {
       'Traditional': {
         freqs: [293.66, 311.13, 349.23, 392.00, 415.30, 466.16, 523.25, 587.33],
@@ -417,13 +417,12 @@ class TeliAudio {
     src.start();
   }
 
-  pluck(freq, vel, decay, detuneCents = 0) {
+  pluck(freq, vel, decay, detuneCents = 0, stringGap = 7) {
     const buf = this._ks(freq, vel, decay);
     this._play(buf, 0);
     if (detuneCents) {
-      // Second course string, slightly detuned — gives Çiftelija shimmer
       const buf2 = this._ks(freq, vel * 0.78, decay - 0.001);
-      setTimeout(() => this._play(buf2, detuneCents), 7);
+      setTimeout(() => this._play(buf2, detuneCents), stringGap);
     }
   }
 
@@ -437,15 +436,14 @@ class TeliAudio {
 ════════════════════════════════════════════════ */
 class TeliMotion {
   constructor(cb) {
-    this.cb = cb;         // { shake, tilt, swipe }
-    this.s = {x:0,y:0,z:0};  // smoothed accel
-    this.a = 0.32;        // EMA alpha
-    this.lastShake = 0;
-    this.cooldown = 310;  // ms between shakes
-    this.threshold = 11;  // m/s² (gravity-removed)
+    this.cb = cb;
+    this.s = {x:0,y:0,z:0};
+    this.a = 0.32;
+    this._swinging = false;
+    this._peakMag  = 0;
+    this._lastFire = 0;
     this._touch = null;
     this._handler = this._onMotion.bind(this);
-    this._hasGravityRemoval = false;
   }
 
   async requestPermission() {
@@ -473,23 +471,36 @@ class TeliMotion {
     const raw = useClean ? e.acceleration : e.accelerationIncludingGravity;
     if (!raw || raw.x == null) return;
 
-    const threshold = useClean ? this.threshold : this.threshold + 8;
+    // Single-axis threshold — X is left/right when phone held in portrait
+    const threshold = useClean ? 8 : 14;
 
     this.s.x = this.a * raw.x + (1 - this.a) * this.s.x;
     this.s.y = this.a * raw.y + (1 - this.a) * this.s.y;
     this.s.z = this.a * raw.z + (1 - this.a) * this.s.z;
 
-    const mag = Math.sqrt(this.s.x**2 + this.s.y**2 + this.s.z**2);
+    // Use X axis only — detects left/right shake, ignores forward/backward
+    const mag = Math.abs(this.s.x);
 
     // Tilt: normalise x-axis to 0-1
     const tilt = Math.max(0, Math.min(1, (raw.x + 5) / 10));
     this.cb.tilt(tilt);
 
     const now = Date.now();
-    if (mag > threshold && now - this.lastShake > this.cooldown) {
-      this.lastShake = now;
-      const intensity = Math.min(1, (mag - threshold) / 20);
-      this.cb.shake(intensity);
+
+    if (!this._swinging) {
+      if (mag > threshold && now - this._lastFire > 60) {
+        this._swinging = true;
+        this._peakMag  = mag;
+      }
+    } else {
+      if (mag > this._peakMag) this._peakMag = mag;
+      if (mag < threshold * 0.6) {
+        const intensity = Math.min(1, (this._peakMag - threshold) / 20);
+        this.cb.shake(intensity);
+        this._lastFire = now;
+        this._swinging = false;
+        this._peakMag  = 0;
+      }
     }
   }
 
@@ -648,7 +659,7 @@ function doShake(intensity) {
     animStrings(guitarStringIds(inst.strings), intensity * 16);
   } else {
     const sc = inst.scales[scale];
-    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, inst.detune);
+    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, inst.detune, inst.stringGap || 7);
     animStrings(ciftStringIds, intensity * 14);
   }
   pulseUI(intensity);
@@ -741,7 +752,7 @@ function bindNoteButtons(inst) {
       document.querySelectorAll('.note-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       const sc = inst.scales[S.scale];
-      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, inst.detune);
+      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, inst.detune, inst.stringGap || 7);
       animStrings(ciftStringIds, 10);
     });
   });
