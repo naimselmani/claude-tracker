@@ -17,9 +17,9 @@ This is the development workspace for **Teli** — a motion-controlled virtual i
 - Every push to a feature branch automatically deploys a **preview**
 - Preview URL format:
   ```
-  https://naimselmani.github.io/claude-tracker/previews/{sanitized-branch-name}/
+  https://naimselmani.github.io/claude-tracker/preview/{sanitized-branch-name}/
   ```
-  Branch name is lowercased and all non-alphanumeric characters replaced with `-`.
+  Branch name is lowercased; `/`, `_`, spaces → `-`; non-alphanumeric chars stripped.
 - If a PR is open for the branch, the preview URL is posted/updated as a PR comment automatically
 
 ### Main branch (production)
@@ -40,9 +40,15 @@ This is the development workspace for **Teli** — a motion-controlled virtual i
 
 | File | Trigger | What it does |
 |------|---------|--------------|
-| `.github/workflows/preview.yml` | Push to any branch except `main` / `gh-pages` | Deploys `web/` to `gh-pages/previews/{branch}/`, posts PR comment |
-| `.github/workflows/deploy-prod.yml` | Push to `main` | Deploys `web/` to `gh-pages` root (production) |
-| `.github/workflows/cleanup-preview.yml` | PR closed | Removes `gh-pages/previews/{branch}/` |
+| `.github/workflows/pages.yml` | Push to **any branch** (+ manual) | Single workflow: main → prod root, any other branch → `gh-pages/preview/{slug}/`; posts/updates preview URL comment on open PRs |
+| `.github/workflows/cleanup-preview.yml` | PR closed | Removes `gh-pages/preview/{slug}/` |
+
+Key details of `pages.yml` (aligned with xhevops-claude/claude-default pattern):
+- Concurrency group `pages-deploy` — serialises deploys, no gh-pages conflicts
+- Slug: branch name lowercased, `/`, `_`, spaces → `-`, non-alphanumeric stripped
+- Cache-busting on preview: appends `?v=<sha>` to `.js`/`.css` refs in HTML so browsers never serve stale assets
+- Uses `peaceiris/actions-gh-pages@v4` with `keep_files: true` so prod and previews coexist
+- Prints deploy URL as a GitHub Actions notice after every deploy
 
 ### GitHub Pages setup (one-time)
 In repo **Settings → Pages**:
