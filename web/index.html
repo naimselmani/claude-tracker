@@ -186,6 +186,28 @@
     #intensity-flash.flash { animation: flashFade .35s ease-out forwards; }
     @keyframes flashFade { 0% { opacity: 1; } 100% { opacity: 0; } }
 
+    /* ── PITCH TRACK ── */
+    #pitch-track {
+      position: absolute; right: 12px; top: 16px; bottom: 72px;
+      width: 6px; border-radius: 3px;
+      background: rgba(200,150,62,0.08);
+      border: 1px solid rgba(200,150,62,0.18);
+      pointer-events: none;
+    }
+    #pitch-knob {
+      position: absolute; left: -5px; right: -5px;
+      height: 18px; border-radius: 9px;
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      bottom: 0%;
+      box-shadow: 0 0 10px rgba(200,150,62,0.75);
+      transition: bottom .04s;
+      pointer-events: none;
+    }
+    #pitch-track::before {
+      content: '▲'; position: absolute; top: -18px; left: 50%;
+      transform: translateX(-50%); font-size: 9px; color: var(--gold-border);
+    }
+
     /* ── CONTROLS ── */
     .ctrl-strip { padding: 12px 0 6px; flex-shrink: 0; }
 
@@ -288,6 +310,7 @@
       <div id="intensity-flash"></div>
       <!-- SVG injected by JS -->
     </div>
+    <div id="pitch-track"><div id="pitch-knob"></div></div>
     <div class="shake-hint" id="shake-hint">Shake · Swipe screen · Tap below</div>
     <div class="tilt-track"><div id="tilt-fill"></div></div>
   </div>
@@ -646,6 +669,7 @@ const S = {
   noteIdx: 0,
   scale: 'Traditional',
   reverb: true,
+  pitchMod: 1.0,  // 1.0 = base pitch, 2.0 = one octave up
 };
 
 const audio = new TeliAudio();
@@ -660,13 +684,12 @@ function doShake(intensity) {
   const { inst, chord, noteIdx, scale } = S;
 
   if (inst.id === 'guitar') {
-    audio.strum(inst.chords[chord], vel, inst.decay, inst.detune, inst.strumGap);
+    audio.strum(inst.chords[chord].map(f => f * S.pitchMod), vel, inst.decay, inst.detune, inst.strumGap);
     animStrings(guitarStringIds(inst.strings), intensity * 16);
   } else {
-    // Çiftelija: melody string first, then B3 drone string 20ms later
     const sc = inst.scales[scale];
-    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, 0);
-    setTimeout(() => audio.pluck(inst.droneFreq, vel * 0.72, inst.decay, 0), inst.stringGap);
+    audio.pluck(sc.freqs[noteIdx] * S.pitchMod, vel, inst.decay, 0);
+    setTimeout(() => audio.pluck(inst.droneFreq * S.pitchMod, vel * 0.72, inst.decay, 0), inst.stringGap);
     animStrings(ciftStringIds, intensity * 14);
   }
   pulseUI(intensity);
@@ -713,7 +736,7 @@ function buildControls(inst) {
         strip.querySelectorAll('.chord-pill').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         // Preview chord softly
-        audio.strum(inst.chords[S.chord], 0.38, inst.decay, inst.detune, inst.strumGap);
+        audio.strum(inst.chords[S.chord].map(f => f * S.pitchMod), 0.38, inst.decay, inst.detune, inst.strumGap);
         animStrings(guitarStringIds(inst.strings), 6);
       });
     });
@@ -759,8 +782,8 @@ function bindNoteButtons(inst) {
       document.querySelectorAll('.note-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       const sc = inst.scales[S.scale];
-      audio.pluck(sc.freqs[S.noteIdx], 0.65, inst.decay, 0);
-      setTimeout(() => audio.pluck(inst.droneFreq, 0.65 * 0.72, inst.decay, 0), inst.stringGap);
+      audio.pluck(sc.freqs[S.noteIdx] * S.pitchMod, 0.65, inst.decay, 0);
+      setTimeout(() => audio.pluck(inst.droneFreq * S.pitchMod, 0.65 * 0.72, inst.decay, 0), inst.stringGap);
       animStrings(ciftStringIds, 10);
     });
   });
@@ -774,6 +797,9 @@ function openPlay(id) {
   S.chord = S.inst.defaultChord || 'Am';
   S.noteIdx = 0;
   S.scale = S.inst.defaultScale || 'Traditional';
+  S.pitchMod = 1.0;
+  const knob = document.getElementById('pitch-knob');
+  if (knob) knob.style.bottom = '0%';
 
   document.getElementById('play-title').textContent = S.inst.name;
   document.getElementById('shake-hint').textContent =
@@ -806,8 +832,27 @@ function showScreen(id) {
 /* ════════════════════════════════════════════════
    BOOT
 ════════════════════════════════════════════════ */
+function setupPitchTouch() {
+  const area = document.getElementById('instrument-area');
+  const knob = document.getElementById('pitch-knob');
+
+  function update(touch) {
+    const rect = area.getBoundingClientRect();
+    const rel = 1 - (touch.clientY - rect.top) / rect.height;
+    const clamped = Math.max(0, Math.min(1, rel));
+    // Logarithmic (musical) mapping: bottom = original pitch, top = +1 octave
+    S.pitchMod = Math.pow(2, clamped);
+    if (knob) knob.style.bottom = (clamped * 100).toFixed(1) + '%';
+  }
+
+  area.addEventListener('touchstart', e => update(e.touches[0]), { passive: true });
+  area.addEventListener('touchmove',  e => update(e.touches[0]), { passive: true });
+  // touchend intentionally omitted — pitch stays at last position
+}
+
 (async function boot() {
   await audio.init();
+  setupPitchTouch();
 
   // Motion permission
   const motionBtn = document.getElementById('motion-btn');
