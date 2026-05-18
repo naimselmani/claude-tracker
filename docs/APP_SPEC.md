@@ -211,3 +211,24 @@ The following are explicitly excluded from version 1.0.0:
 | 0.1 | 2025-01-01 | Product | Initial draft |
 | 0.9 | 2025-03-01 | Product | Pre-dev review |
 | 1.0 | 2025-05-01 | Product | Approved for development |
+| 1.1 | 2026-05-18 | Product | Added performance targets table, expanded instrument section, added success metrics |
+
+---
+
+## 13. Related Documents
+
+| Document | Location |
+|----------|----------|
+| Feature List | `docs/FEATURES.md` |
+| Technical Architecture | `docs/TECHNICAL_ARCHITECTURE.md` |
+| Audio Engine Design | `docs/AUDIO_ENGINE_DESIGN.md` |
+| Motion Engine Design | `docs/MOTION_ENGINE_DESIGN.md` |
+| UX Design | `docs/UX_DESIGN.md` |
+| Legal & IP Checklist | `docs/LEGAL_IP_CHECKLIST.md` |
+| App Store Checklist | `docs/APPSTORE_CHECKLIST.md` |
+| Google Play Checklist | `docs/GOOGLEPLAY_CHECKLIST.md` |
+| MVP Roadmap | `docs/MVP_ROADMAP.md` |
+| Testing Checklist | `docs/TESTING_CHECKLIST.md` |
+| Monetization Strategy | `docs/MONETIZATION.md` |
+| Folder Structure | `docs/FOLDER_STRUCTURE.md` |
+| Sample Naming Convention | `docs/SAMPLE_NAMING_CONVENTION.md` |
