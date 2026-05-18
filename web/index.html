@@ -434,15 +434,15 @@ class TeliAudio {
 ════════════════════════════════════════════════ */
 class TeliMotion {
   constructor(cb) {
-    this.cb = cb;         // { shake, tilt, swipe }
+    this.cb = cb;
     this.s = {x:0,y:0,z:0};  // smoothed accel
-    this.a = 0.32;        // EMA alpha
-    this.lastShake = 0;
-    this.cooldown = 310;  // ms between shakes
-    this.threshold = 11;  // m/s² (gravity-removed)
+    this.a = 0.32;            // EMA alpha
+    this.threshold = 11;      // m/s² trigger threshold
+    this._swinging = false;   // true while inside an active swing
+    this._peakMag  = 0;       // highest magnitude seen in current swing
+    this._lastFire = 0;       // timestamp of last trigger (guards zero-crossing jitter)
     this._touch = null;
     this._handler = this._onMotion.bind(this);
-    this._hasGravityRemoval = false;
   }
 
   async requestPermission() {
@@ -483,10 +483,25 @@ class TeliMotion {
     this.cb.tilt(tilt);
 
     const now = Date.now();
-    if (mag > threshold && now - this.lastShake > this.cooldown) {
-      this.lastShake = now;
-      const intensity = Math.min(1, (mag - threshold) / 20);
-      this.cb.shake(intensity);
+
+    if (!this._swinging) {
+      // Wait for the swing to cross the threshold
+      if (mag > threshold && now - this._lastFire > 60) {
+        this._swinging = true;
+        this._peakMag  = mag;
+      }
+    } else {
+      // Inside a swing — keep tracking the peak
+      if (mag > this._peakMag) this._peakMag = mag;
+
+      // Swing is over when magnitude falls back below 60% of threshold
+      if (mag < threshold * 0.6) {
+        const intensity = Math.min(1, (this._peakMag - threshold) / 20);
+        this.cb.shake(intensity);
+        this._lastFire = now;
+        this._swinging = false;
+        this._peakMag  = 0;
+      }
     }
   }
 
