@@ -883,34 +883,56 @@ const ciftStringIds = ['s0', 's0b', 's1', 's1b'];
 // Scale indices — Traditional scale, E4-based:
 // 0=E4  1=F4  2=G4  3=Ab4  4=Bb4  5=B4  6=C5  7=E5
 //
-// Full-length melodies — A section + B section so each sounds like a complete song.
-// Each has a completely different melodic character and register profile.
+// Six core çifteli melodies from the Albanian folk repertoire.
+// Each has a distinct opening gesture, register, and phrase character.
 const MELODIES = [
   {
-    // Dile Mori — lively call-and-response folk song.
-    // Opens on G, repeats the E–F–E ornament, arches to Bb then settles.
-    // A: G Ab G E | F E F G | Ab G F E | G Ab Bb Ab G F E
-    // B: G Ab G F | E F G Ab | G F E F | G Ab G E
+    // Dile Mori — call-and-response folk song from northern Albania.
+    // Opens on G (2nd degree), ornaments down to E, arches to Bb peak.
+    // A: G Ab G E | F G Ab G | F E F G | Ab G F E
+    // B: G Ab Bb Ab | G F E F | G Ab G F | E E
     name: 'Dile Mori',
     notes: [
-      2,3,2,0, 1,0,1,2, 3,2,1,0, 2,3,4,3,2,1,0,
-      2,3,2,1, 0,1,2,3, 2,1,0,1, 2,3,2,0,
+      2,3,2,0, 1,2,3,2, 1,0,1,2, 3,2,1,0,
+      2,3,4,3, 2,1,0,1, 2,3,2,1, 0,0,
     ],
   },
   {
-    // Moj e Bukura More — beautiful lyrical Albanian song from Calabria.
-    // Smooth stepwise rise E→Ab, then tender fall; no big leaps, intimate.
-    // A: E F G Ab | G F E F | G Ab Bb Ab | G F E
-    // B: E F G Ab | G E F G | Ab G F G | F E
-    name: 'Moj e Bukura More',
+    // Moj e Bukura Moré — lyrical Arbëreshë folk song. "Oh beautiful Moré!"
+    // Smooth stepwise arc E→Bb then tender fall; intimate, no large leaps.
+    // A: E G Ab G F E | G Ab Bb Ab G F | E
+    // B: E F G Ab G F | E F G Ab G E
+    name: 'Moj e Bukura Moré',
     notes: [
-      0,1,2,3, 2,1,0,1, 2,3,4,3, 2,1,0,
-      0,1,2,3, 2,0,1,2, 3,2,1,2, 1,0,
+      0,2,3,2,1,0, 2,3,4,3,2,1, 0,
+      0,1,2,3,2,1, 0,1,2,3,2,0,
     ],
   },
   {
-    // Valle Shqiptare — energetic dance tune.
-    // Rhythmic double-E opening pulse, leaps to Bb, strong dance forward drive.
+    // Oj Lule Lule — joyful dance song. "Oh flower, flower!"
+    // Characteristic repeated G-Ab-G-E gesture; lilting, celebratory.
+    // A: G Ab G E | G Ab G E | F G Ab G | F E
+    // B: Bb Ab G F | E F G Ab | G F E F | G E
+    name: 'Oj Lule Lule',
+    notes: [
+      2,3,2,0, 2,3,2,0, 1,2,3,2, 1,0,
+      4,3,2,1, 0,1,2,3, 2,1,0,1, 2,0,
+    ],
+  },
+  {
+    // Baresha — "The Shepherdess" by Rexho Mulliqi; one of Albania's most beloved songs.
+    // Opens on Ab (Phrygian 4th), flowing melancholic arc down then blossoming to Bb.
+    // A: Ab G F E | G Ab G E | F G Ab Bb | Ab G F E
+    // B: G Ab Bb Ab | G F E G | Ab G F E | G E
+    name: 'Baresha',
+    notes: [
+      3,2,1,0, 2,3,2,0, 1,2,3,4, 3,2,1,0,
+      2,3,4,3, 2,1,0,2, 3,2,1,0, 2,0,
+    ],
+  },
+  {
+    // Valle Shqiptare — energetic Albanian dance tune.
+    // Rhythmic double-E opening pulse, leaps to Bb, strong forward dance drive.
     // A: E E G Ab G E | G Bb Ab G F E | E E G Ab G E | G F E
     // B: G Ab G E E | Bb Ab G F G E | G Ab Bb Ab G | F E E
     name: 'Valle Shqiptare',
@@ -920,8 +942,8 @@ const MELODIES = [
     ],
   },
   {
-    // Shote Galica — heroic song about the legendary Albanian warrior.
-    // Dramatic opening leap E→B (B4 rings as octave of drone B3), bold and assertive.
+    // Shote Galica — heroic song about the legendary Albanian woman warrior.
+    // Dramatic opening leap E→B5 (octave above drone), bold and assertive.
     // A: E B B B | Ab G E G | B B Ab G | F G E
     // B: E F G Ab | G E B B | Ab G F G | Ab G F E
     name: 'Shote Galica',
