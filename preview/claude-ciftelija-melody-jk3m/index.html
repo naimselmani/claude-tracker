@@ -327,20 +327,20 @@ const DEF = {
   },
   ciftelija: {
     id: 'ciftelija', name: 'Çiftelija', strings: 2,
-    // Real tuning: B4 drone + E5 melody string — çifteli plays in a high register
-    decay: 0.9955,
-    droneFreq: 493.88,   // B4 (up from B3 — matches the high melody register)
-    stringGap: 20,
+    // Confirmed tuning: B3 drone (246.94 Hz) + E4 melody string — same as top 2 guitar strings
+    decay: 0.9962,
+    droneFreq: 246.94,   // B3 — open drone string, always rings
+    stringGap: 18,
     strumGap: 7,
     scales: {
-      // E5-based Phrygian — the real high-pitched çifteli register
+      // E4-based diatonic: E-F-G-Ab-Bb-B-C-E (northern Albanian Phrygian mode)
       'Traditional': {
-        freqs: [659.25, 698.46, 784.00, 830.61, 932.33, 987.77, 1046.50, 1318.51],
+        freqs: [329.63, 349.23, 392.00, 415.30, 466.16, 493.88, 523.25, 659.25],
         names: ['E',    'F',    'G',    'Ab',   'Bb',   'B',    'C',    'E↑'],
       },
       'Dorian': {
-        freqs: [659.25, 739.99, 784.00, 880.00, 987.77, 1108.73, 1174.66, 1318.51],
-        names: ['E',    'F#',   'G',    'A',    'B',    'C#',    'D',    'E↑'],
+        freqs: [329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33, 659.25],
+        names: ['E',    'F#',   'G',    'A',    'B',    'C#',   'D',    'E↑'],
       },
     },
     defaultScale: 'Traditional',
@@ -416,55 +416,73 @@ class TeliAudio {
     return out;
   }
 
-  // Çifteli KS: bright metal-string character
-  // b=0.62 (vs guitar 0.50) keeps more highs in the loop — thinner, nasal timbre
-  // Decaying-burst excitation mimics a pick strike rather than flat noise
-  _ksCiftelija(freq, velocity, decay, brightness = 0.62) {
+  // Çifteli KS — pluck-position model: triangular excitation at 1/4 string length.
+  // This is the physically correct model for a plectrum hitting a string and is
+  // what gives the bright, nasal "twang" vs the guitar's smooth flat-noise KS.
+  // brightness=0.80 retains far more high-frequency energy per loop cycle.
+  _ksCiftelija(freq, velocity, decay, brightness = 0.80) {
     const sr = this.ctx.sampleRate;
-    const total = Math.floor(sr * 4.0);
+    const total = Math.floor(sr * 3.5);
     const N = Math.max(2, Math.round(sr / freq));
-
     const ring = new Float32Array(N);
+    const pp = 0.25; // pick position: 1/4 from nut — classic bright plectrum spot
     for (let i = 0; i < N; i++) {
-      ring[i] = (Math.random() * 2 - 1) * velocity * Math.exp(-i / (N * 0.35));
+      const pos = i / N;
+      // Triangular pluck envelope centred at pick position, scaled by noise
+      const tri = pos < pp ? pos / pp : (1 - pos) / (1 - pp);
+      ring[i] = (Math.random() * 2 - 1) * velocity * tri;
     }
-
     const out = this.ctx.createBuffer(1, total, sr);
-    const data = out.getChannelData(0);
+    const d = out.getChannelData(0);
     for (let i = 0; i < total; i++) {
       const idx = i % N;
-      data[i] = ring[idx];
+      d[i] = ring[idx];
       ring[idx] = decay * (brightness * ring[idx] + (1 - brightness) * ring[(idx + 1) % N]);
     }
     return out;
   }
 
-  // Çifteli signal chain: HPF → presence boost → soft-clip → reverb/dry
+  // Short metallic click transient — the plectrum impact before the string rings.
+  // This is the single most recognisable attack characteristic of metal-string lutes.
+  _ciftClick(vel) {
+    const sr = this.ctx.sampleRate;
+    const len = Math.floor(sr * 0.006);
+    const buf = this.ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i * 900 / sr);
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const hpf = this.ctx.createBiquadFilter();
+    hpf.type = 'highpass';
+    hpf.frequency.value = 1400;
+    const g = this.ctx.createGain();
+    g.gain.value = vel * 0.45;
+    src.connect(hpf); hpf.connect(g); g.connect(this.dryGain);
+    src.start();
+  }
+
+  // Çifteli signal chain: HPF → nasal peak → bright shelf → soft-clip
   _playCiftelija(buf, gainScale = 1.0, detuneCents = 0) {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     if (detuneCents) src.detune.value = detuneCents;
 
-    // Remove sub-bass mud (small çifteli body, no content below ~120 Hz)
+    // Small body — cut everything below 200 Hz
     const hpf = this.ctx.createBiquadFilter();
-    hpf.type = 'highpass';
-    hpf.frequency.value = 130;
-    hpf.Q.value = 0.7;
+    hpf.type = 'highpass'; hpf.frequency.value = 200; hpf.Q.value = 0.8;
 
-    // Nasal presence peak — hallmark of metal-string çifteli tone
+    // Nasal peak at 2800 Hz — brighter than guitar presence, defines çifteli character
     const presence = this.ctx.createBiquadFilter();
-    presence.type = 'peaking';
-    presence.frequency.value = 2100;
-    presence.gain.value = 8;
-    presence.Q.value = 1.3;
+    presence.type = 'peaking'; presence.frequency.value = 2800;
+    presence.gain.value = 9; presence.Q.value = 1.6;
 
-    // High-shelf shimmer — çifteli strings ring with upper-harmonic air
+    // High-shelf air: metal strings ring with strong upper harmonics
     const shelf = this.ctx.createBiquadFilter();
-    shelf.type = 'highshelf';
-    shelf.frequency.value = 3500;
-    shelf.gain.value = 6;
+    shelf.type = 'highshelf'; shelf.frequency.value = 4500; shelf.gain.value = 7;
 
-    // Cubic soft-clip: adds 3rd-harmonic metallic buzz without harsh clipping
+    // Cubic soft-clip — adds the slight metallic buzz of thin wire strings
     const ws = this.ctx.createWaveShaper();
     const curve = new Float32Array(512);
     for (let i = 0; i < 512; i++) {
@@ -475,26 +493,23 @@ class TeliAudio {
 
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0.0001, this.ctx.currentTime);
-    env.gain.exponentialRampToValueAtTime(gainScale, this.ctx.currentTime + 0.004);
+    env.gain.exponentialRampToValueAtTime(gainScale, this.ctx.currentTime + 0.003);
 
-    src.connect(env);
-    env.connect(hpf);
-    hpf.connect(presence);
-    presence.connect(shelf);
-    shelf.connect(ws);
-    ws.connect(this.convolver);
-    ws.connect(this.dryGain);
+    src.connect(env); env.connect(hpf); hpf.connect(presence);
+    presence.connect(shelf); shelf.connect(ws);
+    ws.connect(this.convolver); ws.connect(this.dryGain);
     src.start();
   }
 
-  // Double-course pluck: two strings per course, 9¢ apart, 8ms stagger — real çifteli
-  pluckCiftelija(freq, vel, decay, brightness = 0.72) {
+  // Full çifteli pluck: click + double-course (9¢ apart, 5 ms stagger)
+  pluckCiftelija(freq, vel, decay, brightness = 0.80) {
+    this._ciftClick(vel);
     const buf1 = this._ksCiftelija(freq, vel, decay, brightness);
     this._playCiftelija(buf1, 1.0, 0);
     setTimeout(() => {
-      const buf2 = this._ksCiftelija(freq, vel * 0.82, decay - 0.001, brightness);
-      this._playCiftelija(buf2, 0.82, 9);
-    }, 8);
+      const buf2 = this._ksCiftelija(freq, vel * 0.80, decay - 0.001, brightness);
+      this._playCiftelija(buf2, 0.80, 9);
+    }, 5);
   }
 
   _play(buf, pitchCents = 0) {
@@ -732,30 +747,40 @@ const ciftStringIds = ['s0', 's0b', 's1', 's1b'];
    Indices into the Traditional scale:
    0=E4, 1=F4, 2=G4, 3=Ab4, 4=Bb4, 5=B4, 6=C5, 7=E5
 ════════════════════════════════════════════════ */
+// Scale indices — Traditional scale, E4-based:
+// 0=E4  1=F4  2=G4  3=Ab4  4=Bb4  5=B4  6=C5  7=E5
+//
+// Drone = B3 always rings alongside every melody note.
+// Each melody has a completely different opening shape and pitch contour
+// so they are immediately recognisable from each other.
 const MELODIES = [
   {
+    // Dile Mori — lively call pattern, arches through G–Ab–Bb then falls back
+    // Char: two-bar call repeating, peaks at Bb (4), lots of G–Ab motion
+    // G Ab Bb Ab G  F E  G Ab G  F E  F  G Ab G E
     name: 'Dile Mori',
-    // "Calling" motif — opens on G, E–F tonic ornament, modest arc
-    // G G F E  F E G Ab  G F E  F E
-    notes: [2, 2, 1, 0, 1, 0, 2, 3, 2, 1, 0, 1, 0],
+    notes: [2, 3, 4, 3, 2, 1, 0, 2, 3, 2, 1, 0, 1, 2, 3, 2, 0],
   },
   {
+    // Moj e Bukura More — lyrical, rises stepwise E→F→G→Ab then descends warmly
+    // Char: smooth ascending arc, no big leaps, tender falling resolution
+    // E F G Ab G F E  F G Ab Bb Ab G  F E  F E
     name: 'Moj e Bukura More',
-    // Lyrical arc — smooth E→F→G ascent, leap to B5, ornamental descent
-    // E F G  B  Ab G F  E  G Ab G F E
-    notes: [0, 1, 2, 5, 3, 2, 1, 0, 2, 3, 2, 1, 0],
+    notes: [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 0],
   },
   {
+    // Valle Shqiptare — energetic dance, opens with pulsed tonic pairs, big Bb leap
+    // Char: repeated E–E push, leaps up to Bb, drives forward rhythmically
+    // E E  G Ab G E  E  G Bb Bb Ab G  F E  E
     name: 'Valle Shqiptare',
-    // Dance — opens with rhythmic double-E pulse, climbs to Bb5
-    // E E  G Ab G  E  G Bb Ab G F E
-    notes: [0, 0, 2, 3, 2, 0, 2, 4, 3, 2, 1, 0],
+    notes: [0, 0, 2, 3, 2, 0, 0, 2, 4, 4, 3, 2, 1, 0, 0],
   },
   {
+    // Shote Galica — heroic, opens with dramatic E→B4 leap (B4 octave of drone B3)
+    // Char: bold opening jump, repeats B4 (resonates perfectly with B3 drone), assertive
+    // E  B  B  B  Ab G  E  G  B  B  Ab G F  E
     name: 'Shote Galica',
-    // Heroic — immediate E→B5 leap, bold repeated B, resolves down
-    // E  B  B  Ab G  E  G  B  B  Ab F E
-    notes: [0, 5, 5, 3, 2, 0, 2, 5, 5, 3, 1, 0],
+    notes: [0, 5, 5, 5, 3, 2, 0, 2, 5, 5, 3, 2, 1, 0],
   },
 ];
 
@@ -802,8 +827,8 @@ function doShake(intensity) {
     } else {
       freq = sc.freqs[noteIdx];
     }
-    audio.pluckCiftelija(freq, vel, inst.decay, 0.72);
-    setTimeout(() => audio.pluckCiftelija(inst.droneFreq, vel * 0.68, inst.decay, 0.54), inst.stringGap);
+    audio.pluckCiftelija(freq, vel, inst.decay, 0.80);
+    setTimeout(() => audio.pluckCiftelija(inst.droneFreq, vel * 0.65, inst.decay, 0.55), inst.stringGap);
     animStrings(ciftStringIds, intensity * 14);
   }
   pulseUI(intensity);
@@ -925,8 +950,8 @@ function bindNoteButtons(inst) {
       document.querySelectorAll('.note-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       const sc = inst.scales[S.scale];
-      audio.pluckCiftelija(sc.freqs[S.noteIdx], 0.65, inst.decay, 0.72);
-      setTimeout(() => audio.pluckCiftelija(inst.droneFreq, 0.65 * 0.68, inst.decay, 0.54), inst.stringGap);
+      audio.pluckCiftelija(sc.freqs[S.noteIdx], 0.65, inst.decay, 0.80);
+      setTimeout(() => audio.pluckCiftelija(inst.droneFreq, 0.65 * 0.65, inst.decay, 0.55), inst.stringGap);
       animStrings(ciftStringIds, 10);
     });
   });
