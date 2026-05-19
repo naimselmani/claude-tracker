@@ -327,20 +327,20 @@ const DEF = {
   },
   ciftelija: {
     id: 'ciftelija', name: 'Çiftelija', strings: 2,
-    // Real tuning: B3 drone (lower string) + E4 melody string (upper), perfect 4th apart
-    decay: 0.9948,       // slightly higher for metal-string brightness & sustain
-    droneFreq: 246.94,   // B3 — always rings on every strum (lower thick string)
-    stringGap: 20,       // ms: melody fires first, drone 20ms later (low→high strum)
+    // Real tuning: B4 drone + E5 melody string — çifteli plays in a high register
+    decay: 0.9955,
+    droneFreq: 493.88,   // B4 (up from B3 — matches the high melody register)
+    stringGap: 20,
     strumGap: 7,
     scales: {
-      // Northern Albanian diatonic on E4 melody string — Phrygian/Dorian character
+      // E5-based Phrygian — the real high-pitched çifteli register
       'Traditional': {
-        freqs: [329.63, 349.23, 392.00, 415.30, 466.16, 493.88, 523.25, 587.33],
-        names: ['E',    'F',    'G',    'Ab',   'Bb',   'B',    'C',    'E'],
+        freqs: [659.25, 698.46, 784.00, 830.61, 932.33, 987.77, 1046.50, 1318.51],
+        names: ['E',    'F',    'G',    'Ab',   'Bb',   'B',    'C',    'E↑'],
       },
       'Dorian': {
-        freqs: [329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33, 659.25],
-        names: ['E',    'F#',   'G',    'A',    'B',    'C#',   'D',    'E'],
+        freqs: [659.25, 739.99, 784.00, 880.00, 987.77, 1108.73, 1174.66, 1318.51],
+        names: ['E',    'F#',   'G',    'A',    'B',    'C#',    'D',    'E↑'],
       },
     },
     defaultScale: 'Traditional',
@@ -455,8 +455,14 @@ class TeliAudio {
     const presence = this.ctx.createBiquadFilter();
     presence.type = 'peaking';
     presence.frequency.value = 2100;
-    presence.gain.value = 7;
+    presence.gain.value = 8;
     presence.Q.value = 1.3;
+
+    // High-shelf shimmer — çifteli strings ring with upper-harmonic air
+    const shelf = this.ctx.createBiquadFilter();
+    shelf.type = 'highshelf';
+    shelf.frequency.value = 3500;
+    shelf.gain.value = 6;
 
     // Cubic soft-clip: adds 3rd-harmonic metallic buzz without harsh clipping
     const ws = this.ctx.createWaveShaper();
@@ -474,14 +480,15 @@ class TeliAudio {
     src.connect(env);
     env.connect(hpf);
     hpf.connect(presence);
-    presence.connect(ws);
+    presence.connect(shelf);
+    shelf.connect(ws);
     ws.connect(this.convolver);
     ws.connect(this.dryGain);
     src.start();
   }
 
   // Double-course pluck: two strings per course, 9¢ apart, 8ms stagger — real çifteli
-  pluckCiftelija(freq, vel, decay, brightness = 0.62) {
+  pluckCiftelija(freq, vel, decay, brightness = 0.72) {
     const buf1 = this._ksCiftelija(freq, vel, decay, brightness);
     this._playCiftelija(buf1, 1.0, 0);
     setTimeout(() => {
@@ -787,7 +794,7 @@ function doShake(intensity) {
     } else {
       freq = sc.freqs[noteIdx];
     }
-    audio.pluckCiftelija(freq, vel, inst.decay, 0.62);
+    audio.pluckCiftelija(freq, vel, inst.decay, 0.72);
     setTimeout(() => audio.pluckCiftelija(inst.droneFreq, vel * 0.68, inst.decay, 0.54), inst.stringGap);
     animStrings(ciftStringIds, intensity * 14);
   }
@@ -910,7 +917,7 @@ function bindNoteButtons(inst) {
       document.querySelectorAll('.note-pill').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       const sc = inst.scales[S.scale];
-      audio.pluckCiftelija(sc.freqs[S.noteIdx], 0.65, inst.decay, 0.62);
+      audio.pluckCiftelija(sc.freqs[S.noteIdx], 0.65, inst.decay, 0.72);
       setTimeout(() => audio.pluckCiftelija(inst.droneFreq, 0.65 * 0.68, inst.decay, 0.54), inst.stringGap);
       animStrings(ciftStringIds, 10);
     });
