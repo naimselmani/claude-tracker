@@ -231,6 +231,15 @@
     .scale-pill.active { background: var(--gold-dim); color: var(--gold); border-color: var(--gold); }
     .scale-pill:active { opacity: .7; }
 
+    /* Melody row */
+    .melody-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px; padding: 0 16px 8px;
+    }
+    .melody-hint {
+      font-size: 11px; color: var(--text-muted); letter-spacing: .3px;
+    }
+
     /* Credits */
     .credits {
       text-align: center; font-size: 11px; color: var(--text-muted);
@@ -638,6 +647,30 @@ function guitarStringIds(n) { return Array.from({length: n}, (_, i) => `s${i}`);
 const ciftStringIds = ['s0', 's0b', 's1', 's1b'];
 
 /* ════════════════════════════════════════════════
+   ALBANIAN FOLK MELODIES
+   Indices into the Traditional scale:
+   0=E4, 1=F4, 2=G4, 3=Ab4, 4=Bb4, 5=B4, 6=C5, 7=E5
+════════════════════════════════════════════════ */
+const MELODIES = [
+  {
+    name: 'Dile Mori',
+    notes: [2, 1, 0, 1, 2, 3, 2, 1, 0, 4, 3, 2, 1, 0],
+  },
+  {
+    name: 'Baresha',
+    notes: [0, 2, 3, 2, 0, 1, 0, 5, 0, 1, 2, 1, 0],
+  },
+  {
+    name: 'Valle Shqiptare',
+    notes: [3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0, 5, 0],
+  },
+  {
+    name: 'Shote Galica',
+    notes: [0, 1, 2, 3, 2, 3, 4, 3, 2, 1, 0, 5, 0, 1, 2, 1, 0],
+  },
+];
+
+/* ════════════════════════════════════════════════
    APP STATE
 ════════════════════════════════════════════════ */
 const S = {
@@ -646,6 +679,9 @@ const S = {
   noteIdx: 0,
   scale: 'Traditional',
   reverb: true,
+  melodyOn: false,
+  melodyPreset: 0,
+  melodyNoteIdx: 0,
 };
 
 const audio = new TeliAudio();
@@ -665,7 +701,19 @@ function doShake(intensity) {
   } else {
     // Çiftelija: melody string first, then B3 drone string 20ms later
     const sc = inst.scales[scale];
-    audio.pluck(sc.freqs[noteIdx], vel, inst.decay, 0);
+    let freq;
+    if (S.melodyOn) {
+      const mel = MELODIES[S.melodyPreset];
+      freq = sc.freqs[mel.notes[S.melodyNoteIdx]];
+      S.melodyNoteIdx = (S.melodyNoteIdx + 1) % mel.notes.length;
+      // Sync note highlight and counter
+      _highlightMelodyNote(mel.notes[S.melodyNoteIdx]);
+      const hint = document.getElementById('melody-hint');
+      if (hint) hint.textContent = `${S.melodyNoteIdx + 1} / ${mel.notes.length}`;
+    } else {
+      freq = sc.freqs[noteIdx];
+    }
+    audio.pluck(freq, vel, inst.decay, 0);
     setTimeout(() => audio.pluck(inst.droneFreq, vel * 0.72, inst.decay, 0), inst.stringGap);
     animStrings(ciftStringIds, intensity * 14);
   }
@@ -720,16 +768,39 @@ function buildControls(inst) {
   } else {
     const scKeys = Object.keys(inst.scales);
     const sc = inst.scales[S.scale];
+    const melBtnLabel = S.melodyOn ? `♪ ${MELODIES[S.melodyPreset].name}` : '♪ Melody';
     strip.innerHTML = `
+      <div class="melody-row">
+        <button class="pill sm melody-btn${S.melodyOn ? ' active' : ''}" id="melody-btn"
+          style="min-width:130px">${melBtnLabel}</button>
+        <div class="melody-hint" id="melody-hint">${S.melodyOn
+          ? `${S.melodyNoteIdx + 1} / ${MELODIES[S.melodyPreset].notes.length}`
+          : 'tap to cycle melodies'}</div>
+      </div>
       <div class="scale-row">
         ${scKeys.map(k => `<button class="scale-pill${k === S.scale ? ' active' : ''}"
           data-sc="${k}">${k}</button>`).join('')}
       </div>
-      <div class="strip-label">Note — tap to play, shake to pluck</div>
+      <div class="strip-label">${S.melodyOn ? 'Shake to play melody note-by-note' : 'Note — tap to play, shake to pluck'}</div>
       <div class="btn-row" id="note-row">
         ${sc.names.map((n, i) => `<button class="pill sm note-pill${i === S.noteIdx ? ' active' : ''}"
           data-i="${i}">${n}</button>`).join('')}
       </div>`;
+    document.getElementById('melody-btn').addEventListener('click', () => {
+      if (!S.melodyOn) {
+        S.melodyOn = true;
+        S.melodyNoteIdx = 0;
+      } else {
+        // Cycle to next melody, wrapping back to off after last
+        S.melodyPreset = (S.melodyPreset + 1) % MELODIES.length;
+        if (S.melodyPreset === 0) {
+          // Wrapped — turn off after cycling through all
+          S.melodyOn = false;
+        }
+        S.melodyNoteIdx = 0;
+      }
+      buildControls(inst);
+    });
     strip.querySelectorAll('.scale-pill').forEach(b => {
       b.addEventListener('click', () => {
         S.scale = b.dataset.sc; S.noteIdx = 0;
@@ -740,6 +811,12 @@ function buildControls(inst) {
     });
     bindNoteButtons(inst);
   }
+}
+
+function _highlightMelodyNote(scaleIdx) {
+  document.querySelectorAll('.note-pill').forEach((b, i) => {
+    b.classList.toggle('active', i === scaleIdx);
+  });
 }
 
 function rebuildNotes(inst) {
@@ -779,6 +856,7 @@ function openPlay(id) {
   document.getElementById('shake-hint').textContent =
     id === 'guitar' ? 'Shake · Swipe screen · Tap a chord below'
                     : 'Tap a note · Shake to pluck';
+  S.melodyOn = false; S.melodyPreset = 0; S.melodyNoteIdx = 0;
 
   const wrap = document.getElementById('svg-wrap');
   // Keep ring & flash, insert SVG before them
