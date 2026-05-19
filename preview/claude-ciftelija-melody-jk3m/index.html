@@ -735,19 +735,27 @@ const ciftStringIds = ['s0', 's0b', 's1', 's1b'];
 const MELODIES = [
   {
     name: 'Dile Mori',
-    notes: [2, 1, 0, 1, 2, 3, 2, 1, 0, 4, 3, 2, 1, 0],
+    // "Calling" motif — opens on G, E–F tonic ornament, modest arc
+    // G G F E  F E G Ab  G F E  F E
+    notes: [2, 2, 1, 0, 1, 0, 2, 3, 2, 1, 0, 1, 0],
   },
   {
-    name: 'Baresha',
-    notes: [0, 2, 3, 2, 0, 1, 0, 5, 0, 1, 2, 1, 0],
+    name: 'Moj e Bukura More',
+    // Lyrical arc — smooth E→F→G ascent, leap to B5, ornamental descent
+    // E F G  B  Ab G F  E  G Ab G F E
+    notes: [0, 1, 2, 5, 3, 2, 1, 0, 2, 3, 2, 1, 0],
   },
   {
     name: 'Valle Shqiptare',
-    notes: [3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0, 5, 0],
+    // Dance — opens with rhythmic double-E pulse, climbs to Bb5
+    // E E  G Ab G  E  G Bb Ab G F E
+    notes: [0, 0, 2, 3, 2, 0, 2, 4, 3, 2, 1, 0],
   },
   {
     name: 'Shote Galica',
-    notes: [0, 1, 2, 3, 2, 3, 4, 3, 2, 1, 0, 5, 0, 1, 2, 1, 0],
+    // Heroic — immediate E→B5 leap, bold repeated B, resolves down
+    // E  B  B  Ab G  E  G  B  B  Ab F E
+    notes: [0, 5, 5, 3, 2, 0, 2, 5, 5, 3, 1, 0],
   },
 ];
 
