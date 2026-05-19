@@ -416,34 +416,55 @@ class TeliAudio {
     return out;
   }
 
-  // Çifteli KS — pluck-position model: triangular excitation at 1/4 string length.
-  // This is the physically correct model for a plectrum hitting a string and is
-  // what gives the bright, nasal "twang" vs the guitar's smooth flat-noise KS.
-  // brightness=0.80 retains far more high-frequency energy per loop cycle.
-  _ksCiftelija(freq, velocity, decay, brightness = 0.80) {
+  // Additive synthesis for çifteli — each harmonic partial has its own amplitude
+  // envelope. Metal strings are INHARMONIC (slightly stiff) so partial ratios are
+  // not exact multiples; higher partials also decay MUCH faster than the fundamental.
+  // This gives the bright "twang" attack that settles into a purer sustain — the
+  // characteristic behaviour KS flat-noise cannot replicate.
+  _synthCiftelija(freq, velocity, decay) {
     const sr = this.ctx.sampleRate;
-    const total = Math.floor(sr * 3.5);
-    const N = Math.max(2, Math.round(sr / freq));
-    const ring = new Float32Array(N);
-    const pp = 0.25; // pick position: 1/4 from nut — classic bright plectrum spot
-    for (let i = 0; i < N; i++) {
-      const pos = i / N;
-      // Triangular pluck envelope centred at pick position, scaled by noise
-      const tri = pos < pp ? pos / pp : (1 - pos) / (1 - pp);
-      ring[i] = (Math.random() * 2 - 1) * velocity * tri;
-    }
+    const total = Math.floor(sr * 3.8);
     const out = this.ctx.createBuffer(1, total, sr);
     const d = out.getChannelData(0);
+
+    // B: inharmonicity coefficient for thin metal strings (~0.0003)
+    // f_n = n * f0 * sqrt(1 + B*n²) — slight sharpening of upper partials
+    const B = 0.00032;
+    // Partials: [amplitude, decay-time-constant seconds]
+    // Higher partials decay far faster — bright pick attack then warm sustain
+    const P = [
+      [0.90, 3.0],   // 1st — fundamental, long sustain
+      [0.55, 1.1],   // 2nd
+      [0.28, 0.55],  // 3rd
+      [0.09, 0.28],  // 4th — weak at 1/4 pick position (near null)
+      [0.20, 0.18],  // 5th
+      [0.13, 0.11],  // 6th — gone in <200 ms
+      [0.08, 0.07],  // 7th
+      [0.05, 0.045], // 8th — almost pure attack click
+    ];
+
+    // Random per-note phase (avoids machine-like regularity across plucks)
+    const phases = P.map(() => Math.random() * 2 * Math.PI);
+
+    const freqScale = Math.sqrt(freq / 329.63); // higher notes decay faster
+
     for (let i = 0; i < total; i++) {
-      const idx = i % N;
-      d[i] = ring[idx];
-      ring[idx] = decay * (brightness * ring[idx] + (1 - brightness) * ring[(idx + 1) % N]);
+      const t = i / sr;
+      let s = 0;
+      for (let k = 0; k < P.length; k++) {
+        const n = k + 1;
+        // Inharmonic frequency of this partial
+        const fn = freq * n * Math.sqrt(1 + B * n * n);
+        // Per-partial envelope: fast for high harmonics
+        const env = P[k][0] * Math.exp(-t * P[k][1] * freqScale);
+        s += env * Math.sin(2 * Math.PI * fn * t + phases[k]);
+      }
+      d[i] = s * velocity;
     }
     return out;
   }
 
-  // Short metallic click transient — the plectrum impact before the string rings.
-  // This is the single most recognisable attack characteristic of metal-string lutes.
+  // Short metallic plectrum-impact transient — high-passed click before the note rings
   _ciftClick(vel) {
     const sr = this.ctx.sampleRate;
     const len = Math.floor(sr * 0.006);
@@ -455,34 +476,38 @@ class TeliAudio {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const hpf = this.ctx.createBiquadFilter();
-    hpf.type = 'highpass';
-    hpf.frequency.value = 1400;
+    hpf.type = 'highpass'; hpf.frequency.value = 1400;
     const g = this.ctx.createGain();
     g.gain.value = vel * 0.45;
     src.connect(hpf); hpf.connect(g); g.connect(this.dryGain);
     src.start();
   }
 
-  // Çifteli signal chain: HPF → nasal peak → bright shelf → soft-clip
+  // Çifteli signal chain: HPF → body peak → nasal presence → bright shelf → soft-clip
   _playCiftelija(buf, gainScale = 1.0, detuneCents = 0) {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     if (detuneCents) src.detune.value = detuneCents;
 
-    // Small body — cut everything below 200 Hz
+    // Small pear-shaped body — nothing below 180 Hz
     const hpf = this.ctx.createBiquadFilter();
-    hpf.type = 'highpass'; hpf.frequency.value = 200; hpf.Q.value = 0.8;
+    hpf.type = 'highpass'; hpf.frequency.value = 180; hpf.Q.value = 0.85;
 
-    // Nasal peak at 2800 Hz — brighter than guitar presence, defines çifteli character
+    // Body resonance peak (~380 Hz) — the wooden bowl thump
+    const body = this.ctx.createBiquadFilter();
+    body.type = 'peaking'; body.frequency.value = 380;
+    body.gain.value = 5; body.Q.value = 3.5;
+
+    // Nasal presence — defines the çifteli character vs guitar
     const presence = this.ctx.createBiquadFilter();
     presence.type = 'peaking'; presence.frequency.value = 2800;
     presence.gain.value = 9; presence.Q.value = 1.6;
 
-    // High-shelf air: metal strings ring with strong upper harmonics
+    // Wire-string air — bright upper harmonics
     const shelf = this.ctx.createBiquadFilter();
     shelf.type = 'highshelf'; shelf.frequency.value = 4500; shelf.gain.value = 7;
 
-    // Cubic soft-clip — adds the slight metallic buzz of thin wire strings
+    // Cubic soft-clip for the metallic string buzz
     const ws = this.ctx.createWaveShaper();
     const curve = new Float32Array(512);
     for (let i = 0; i < 512; i++) {
@@ -495,20 +520,20 @@ class TeliAudio {
     env.gain.setValueAtTime(0.0001, this.ctx.currentTime);
     env.gain.exponentialRampToValueAtTime(gainScale, this.ctx.currentTime + 0.003);
 
-    src.connect(env); env.connect(hpf); hpf.connect(presence);
-    presence.connect(shelf); shelf.connect(ws);
+    src.connect(env); env.connect(hpf); hpf.connect(body);
+    body.connect(presence); presence.connect(shelf); shelf.connect(ws);
     ws.connect(this.convolver); ws.connect(this.dryGain);
     src.start();
   }
 
-  // Full çifteli pluck: click + double-course (9¢ apart, 5 ms stagger)
-  pluckCiftelija(freq, vel, decay, brightness = 0.80) {
+  // Full çifteli pluck: click transient + double-course (9¢ apart, 5 ms stagger)
+  pluckCiftelija(freq, vel, decay, brightness) { // brightness unused, kept for compat
     this._ciftClick(vel);
-    const buf1 = this._ksCiftelija(freq, vel, decay, brightness);
+    const buf1 = this._synthCiftelija(freq, vel, decay);
     this._playCiftelija(buf1, 1.0, 0);
     setTimeout(() => {
-      const buf2 = this._ksCiftelija(freq, vel * 0.80, decay - 0.001, brightness);
-      this._playCiftelija(buf2, 0.80, 9);
+      const buf2 = this._synthCiftelija(freq, vel * 0.78, decay);
+      this._playCiftelija(buf2, 0.78, 9);
     }, 5);
   }
 
@@ -750,37 +775,52 @@ const ciftStringIds = ['s0', 's0b', 's1', 's1b'];
 // Scale indices — Traditional scale, E4-based:
 // 0=E4  1=F4  2=G4  3=Ab4  4=Bb4  5=B4  6=C5  7=E5
 //
-// Drone = B3 always rings alongside every melody note.
-// Each melody has a completely different opening shape and pitch contour
-// so they are immediately recognisable from each other.
+// Full-length melodies — A section + B section so each sounds like a complete song.
+// Each has a completely different melodic character and register profile.
 const MELODIES = [
   {
-    // Dile Mori — lively call pattern, arches through G–Ab–Bb then falls back
-    // Char: two-bar call repeating, peaks at Bb (4), lots of G–Ab motion
-    // G Ab Bb Ab G  F E  G Ab G  F E  F  G Ab G E
+    // Dile Mori — lively call-and-response folk song.
+    // Opens on G, repeats the E–F–E ornament, arches to Bb then settles.
+    // A: G Ab G E | F E F G | Ab G F E | G Ab Bb Ab G F E
+    // B: G Ab G F | E F G Ab | G F E F | G Ab G E
     name: 'Dile Mori',
-    notes: [2, 3, 4, 3, 2, 1, 0, 2, 3, 2, 1, 0, 1, 2, 3, 2, 0],
+    notes: [
+      2,3,2,0, 1,0,1,2, 3,2,1,0, 2,3,4,3,2,1,0,
+      2,3,2,1, 0,1,2,3, 2,1,0,1, 2,3,2,0,
+    ],
   },
   {
-    // Moj e Bukura More — lyrical, rises stepwise E→F→G→Ab then descends warmly
-    // Char: smooth ascending arc, no big leaps, tender falling resolution
-    // E F G Ab G F E  F G Ab Bb Ab G  F E  F E
+    // Moj e Bukura More — beautiful lyrical Albanian song from Calabria.
+    // Smooth stepwise rise E→Ab, then tender fall; no big leaps, intimate.
+    // A: E F G Ab | G F E F | G Ab Bb Ab | G F E
+    // B: E F G Ab | G E F G | Ab G F G | F E
     name: 'Moj e Bukura More',
-    notes: [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 0],
+    notes: [
+      0,1,2,3, 2,1,0,1, 2,3,4,3, 2,1,0,
+      0,1,2,3, 2,0,1,2, 3,2,1,2, 1,0,
+    ],
   },
   {
-    // Valle Shqiptare — energetic dance, opens with pulsed tonic pairs, big Bb leap
-    // Char: repeated E–E push, leaps up to Bb, drives forward rhythmically
-    // E E  G Ab G E  E  G Bb Bb Ab G  F E  E
+    // Valle Shqiptare — energetic dance tune.
+    // Rhythmic double-E opening pulse, leaps to Bb, strong dance forward drive.
+    // A: E E G Ab G E | G Bb Ab G F E | E E G Ab G E | G F E
+    // B: G Ab G E E | Bb Ab G F G E | G Ab Bb Ab G | F E E
     name: 'Valle Shqiptare',
-    notes: [0, 0, 2, 3, 2, 0, 0, 2, 4, 4, 3, 2, 1, 0, 0],
+    notes: [
+      0,0,2,3,2,0, 2,4,3,2,1,0, 0,0,2,3,2,0, 2,1,0,
+      2,3,2,0,0, 4,3,2,1,2,0, 2,3,4,3,2, 1,0,0,
+    ],
   },
   {
-    // Shote Galica — heroic, opens with dramatic E→B4 leap (B4 octave of drone B3)
-    // Char: bold opening jump, repeats B4 (resonates perfectly with B3 drone), assertive
-    // E  B  B  B  Ab G  E  G  B  B  Ab G F  E
+    // Shote Galica — heroic song about the legendary Albanian warrior.
+    // Dramatic opening leap E→B (B4 rings as octave of drone B3), bold and assertive.
+    // A: E B B B | Ab G E G | B B Ab G | F G E
+    // B: E F G Ab | G E B B | Ab G F G | Ab G F E
     name: 'Shote Galica',
-    notes: [0, 5, 5, 5, 3, 2, 0, 2, 5, 5, 3, 2, 1, 0],
+    notes: [
+      0,5,5,5, 3,2,0,2, 5,5,3,2, 1,2,0,
+      0,1,2,3, 2,0,5,5, 3,2,1,2, 3,2,1,0,
+    ],
   },
 ];
 
