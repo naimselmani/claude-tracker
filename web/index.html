@@ -302,7 +302,10 @@
   </div>
 
   <div class="ctrl-strip" id="ctrl-strip"></div>
-  <div class="credits">Teli · Web Audio API · Karplus-Strong string model</div>
+  <div class="credits">
+    <span id="sample-indicator" style="color:var(--text-muted)">♪ Synthesised sound</span>
+    &nbsp;·&nbsp;Teli · Web Audio API
+  </div>
 </div>
 
 <script>
@@ -348,6 +351,100 @@ const DEF = {
 };
 
 /* ════════════════════════════════════════════════
+   ÇIFTELI SAMPLE LOADER
+   Tries to load real recorded samples from web/samples/ciftelija/.
+   Falls back to additive synthesis if files are absent.
+   Files must be named: B3.mp3, E4.mp3, F4.mp3, G4.mp3,
+   Ab4.mp3, Bb4.mp3, B4.mp3, C5.mp3, E5.mp3
+════════════════════════════════════════════════ */
+class CifteliSampler {
+  static NOTES = [
+    { name:'B3',  hz:246.94 },
+    { name:'E4',  hz:329.63 },
+    { name:'F4',  hz:349.23 },
+    { name:'G4',  hz:392.00 },
+    { name:'Ab4', hz:415.30 },
+    { name:'Bb4', hz:466.16 },
+    { name:'B4',  hz:493.88 },
+    { name:'C5',  hz:523.25 },
+    { name:'E5',  hz:659.25 },
+  ];
+
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.bufs = {};   // name → AudioBuffer
+    this.ready = false;
+  }
+
+  async load() {
+    const results = await Promise.allSettled(
+      CifteliSampler.NOTES.map(async ({ name }) => {
+        for (const ext of ['mp3', 'wav', 'ogg']) {
+          try {
+            const r = await fetch(`samples/ciftelija/${name}.${ext}`);
+            if (!r.ok) continue;
+            const ab = await r.arrayBuffer();
+            this.bufs[name] = await this.ctx.decodeAudioData(ab);
+            return name;
+          } catch {}
+        }
+        return null;
+      })
+    );
+    const loaded = results.filter(r => r.status === 'fulfilled' && r.value).length;
+    this.ready = loaded > 0;
+    const indicator = document.getElementById('sample-indicator');
+    if (indicator) {
+      indicator.textContent = this.ready
+        ? `♪ ${loaded}/9 real samples loaded`
+        : '♪ Synthesised sound';
+      indicator.style.color = this.ready ? 'var(--gold)' : 'var(--text-muted)';
+    }
+    return loaded;
+  }
+
+  // Find the nearest loaded sample to targetHz; return null if none within 1 octave
+  _nearest(targetHz) {
+    let best = null, bestAbsCents = Infinity;
+    for (const { name, hz } of CifteliSampler.NOTES) {
+      if (!this.bufs[name]) continue;
+      const cents = 1200 * Math.log2(targetHz / hz);
+      if (Math.abs(cents) < bestAbsCents) {
+        bestAbsCents = Math.abs(cents);
+        best = { buf: this.bufs[name], cents };
+      }
+    }
+    return best && bestAbsCents <= 1200 ? best : null;
+  }
+
+  // Play sample routed into the shared wet/dry bus; returns true if played
+  play(targetHz, vel, convolver, dryGain) {
+    const n = this._nearest(targetHz);
+    if (!n) return false;
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = n.buf;
+    src.detune.value = n.cents;  // pitch-shift cents to hit exact target
+
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+    env.gain.exponentialRampToValueAtTime(vel, this.ctx.currentTime + 0.003);
+
+    // Same filter chain as synthesis path — keeps timbre consistent
+    const hpf = this.ctx.createBiquadFilter();
+    hpf.type = 'highpass'; hpf.frequency.value = 180;
+    const presence = this.ctx.createBiquadFilter();
+    presence.type = 'peaking'; presence.frequency.value = 2800;
+    presence.gain.value = 4; presence.Q.value = 1.2;
+
+    src.connect(env); env.connect(hpf); hpf.connect(presence);
+    presence.connect(convolver); presence.connect(dryGain);
+    src.start();
+    return true;
+  }
+}
+
+/* ════════════════════════════════════════════════
    AUDIO ENGINE — Karplus-Strong string synthesis
 ════════════════════════════════════════════════ */
 class TeliAudio {
@@ -357,6 +454,7 @@ class TeliAudio {
     this.convolver = null;
     this.wetGain = null;
     this.dryGain = null;
+    this.sampler = null;   // CifteliSampler, set after init
   }
 
   async init() {
@@ -526,14 +624,24 @@ class TeliAudio {
     src.start();
   }
 
-  // Full çifteli pluck: click transient + double-course (9¢ apart, 5 ms stagger)
-  pluckCiftelija(freq, vel, decay, brightness) { // brightness unused, kept for compat
+  // Full çifteli pluck: real sample if loaded, additive synthesis as fallback.
+  // Always adds click transient + double-course detuned unison (9¢, 5 ms stagger).
+  pluckCiftelija(freq, vel, decay, brightness) {
     this._ciftClick(vel);
-    const buf1 = this._synthCiftelija(freq, vel, decay);
-    this._playCiftelija(buf1, 1.0, 0);
+
+    const useSample = this.sampler && this.sampler.ready &&
+      this.sampler.play(freq, vel, this.convolver, this.dryGain);
+
+    if (!useSample) {
+      const buf1 = this._synthCiftelija(freq, vel, decay);
+      this._playCiftelija(buf1, 1.0, 0);
+    }
+
+    // Second string of same course (9¢ detune, 5 ms later) — always synthesised
+    // so the chorus width comes through regardless of sample availability
     setTimeout(() => {
-      const buf2 = this._synthCiftelija(freq, vel * 0.78, decay);
-      this._playCiftelija(buf2, 0.78, 9);
+      const buf2 = this._synthCiftelija(freq, vel * 0.62, decay);
+      this._playCiftelija(buf2, 0.62, 9);
     }, 5);
   }
 
@@ -1040,6 +1148,11 @@ function showScreen(id) {
 ════════════════════════════════════════════════ */
 (async function boot() {
   await audio.init();
+
+  // Try to load real çifteli samples (non-blocking — app works without them)
+  const sampler = new CifteliSampler(audio.ctx);
+  audio.sampler = sampler;
+  sampler.load(); // fire-and-forget; indicator updates when done
 
   // Motion permission
   const motionBtn = document.getElementById('motion-btn');
